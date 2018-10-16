@@ -1,12 +1,28 @@
 from django.shortcuts import render, redirect
-from items.models import Item
+from items.models import Item, FavoriteItem
+from django.db.models import Q
 from .forms import UserRegisterForm, UserLoginForm
 from django.contrib.auth import login, logout, authenticate
+from django.http import JsonResponse 
 
 # Create your views here.
 def item_list(request):
+    if not request.user.is_authenticated:
+        return redirect('user-login')
+    items = Item.objects.all()
+    query = request.GET.get('q')
+    if query:
+        items = items.filter(
+        Q(name__icontains=query)|
+        Q(description__icontains=query)
+        ).distinct()
+
+    my_fav = []
+    for favorite in FavoriteItem.objects.filter(user = request.user):
+        my_fav.append(favorite.item.id)   
     context = {
-        "items": Item.objects.all()
+        "items": items,
+        "my_favs": my_fav,
     }
     return render(request, 'item_list.html', context)
 
@@ -51,3 +67,36 @@ def user_logout(request):
     logout(request)
 
     return redirect('item-list')
+
+def item_favorite(request, item_id):
+    item = Item.objects.get(id=item_id)
+    favorite , created = FavoriteItem.objects.get_or_create(item= item, user=request.user)
+    if created:
+        action= "like"
+    else:
+        action="unlike"
+        favorite.delete()
+    data = {
+    "action": action
+    }
+    return JsonResponse(data)
+
+
+def favorite_items(request):
+    if not request.user.is_authenticated:
+        return redirect('user-login')
+    items = FavoriteItem.objects.filter(user=request.user)
+    query = request.GET.get('q1')
+    if query:
+        items = items.filter(
+        Q(item__name__icontains=query)|
+        Q(item__description__icontains=query)
+        ).distinct()
+    # my_fav = []
+    # for favorite in FavoriteItem.objects.filter(user = request.user):
+    #     my_fav.append(favorite.item)   
+    context = {
+        # "my_fav": my_fav,
+        "items": items,
+    }
+    return render(request, 'fav_list.html', context)
